@@ -9,7 +9,7 @@
     },
     "latest_direction": "bullish",
     "latest_score": 1.1,
-    "latest_etf": 0
+    "latest_etf": 4.055
   },
   "series": {
     "dates": [
@@ -198,7 +198,7 @@
       3.846,
       3.946,
       4.034,
-      0
+      4.055
     ],
     "vol_pcr": [
       3.05,
@@ -1984,7 +1984,7 @@
       "medium",
       "medium",
       "medium",
-      "low"
+      "medium"
     ]
   }
 }
