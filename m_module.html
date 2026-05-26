@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>M模块 · 期权仓差区域分析</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,'Microsoft YaHei',sans-serif;padding:20px}
+h1{text-align:center;font-size:18px;margin:0 0 4px 0;color:#eee}
+.sub{text-align:center;font-size:12px;color:#666;margin-bottom:16px}
+.container{max-width:1300px;margin:0 auto}
+.chart-box{background:#16213e;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+.chart{width:100%;height:400px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.stat-card{flex:1;min-width:100px;background:#16213e;border-radius:8px;padding:8px 12px;text-align:center}
+.stat-card .num{font-size:20px;font-weight:700}
+.stat-card .num.green{color:#4ade80}
+.stat-card .num.red{color:#e94560}
+.stat-card .num.yellow{color:#facc15}
+.stat-card .num.blue{color:#38bdf8}
+.stat-card .num.orange{color:#fb923c}
+.stat-card .label{font-size:11px;color:#888;margin-top:2px}
+.info-box{background:#0f3460;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;line-height:1.7;color:#aaa}
+.info-box strong{color:#e94560}
+.info-box .green{color:#4ade80}
+.info-box .blue{color:#38bdf8}
+.info-box .orange{color:#fb923c}
+</style>
+</head><body>
+<div class="container">
+<h1>M模块 · 期权仓差区域分析（140天 2025/10~2026/05）</h1>
+<div class="sub">数据来源: TDX IV History CSV | 仓差=当天开仓量（正仓差）| ATM=平值±5% 虚值OTM=±5~15% 深虚=±15%+</div>
+
+<div class="info-box">
+📌 <strong>上图A</strong>: ETF收盘(绿) + 三大区域CALL开仓净方向堆叠柱(正=看涨开仓, 负=看跌开仓)<br>
+📌 <strong>中图B</strong>: 按时间维度拆分(当月M1->次月M2->远月M3+)<br>
+📌 <strong>下图C</strong>: OTM(浅蓝柱) vs 深虚CALL(红点) — 抄底投机vs保护避险<br>
+📌 <span class="green">绿柱</span>=CALL开仓领先(看涨) | <span class="red">红柱</span>=PUT开仓领先(看跌) | 底部滑块可拖动
+</div>
+
+<div class="stats" id="stats-bar"></div>
+
+<div id="chart-a" class="chart-box"><div id="c-a" class="chart"></div></div>
+<div id="chart-b" class="chart-box"><div id="c-b" class="chart" style="height:300px"></div></div>
+<div id="chart-c" class="chart-box"><div id="c-c" class="chart" style="height:300px"></div></div>
+</div>
+
+<script>
+fetch('./m_module_data_3y.json').then(r=>r.json()).then(d=>{
+    if(!d||!d.length){document.body.innerHTML='<p style="color:red;padding:40px">数据为空</p>';return}
+    
+    const dates = d.map(v=>v.date);
+    const etf = d.map(v=>v.etf);
+    const atmNet = d.map(v=>v.atm_net);
+    const otmNet = d.map(v=>v.otm_net);
+    const deepNet = d.map(v=>v.deep_net);
+    const totalNet = d.map(v=>v.total_net);
+    const m1n = d.map(v=>v.m1_net);
+    const m2n = d.map(v=>v.m2_net);
+    const m3pn = d.map(v=>v.m3p_net);
+    
+    // 统计
+    const totalCall = d.reduce((s,v)=>s+v.total_call_open,0);
+    const totalPut = d.reduce((s,v)=>s+v.total_put_open,0);
+    const totAtmC = d.reduce((s,v)=>s+v.atm_call_open,0);
+    const totAtmP = d.reduce((s,v)=>s+v.atm_put_open,0);
+    const totOtmC = d.reduce((s,v)=>s+v.otm_call_open,0);
+    const totOtmP = d.reduce((s,v)=>s+v.otm_put_open,0);
+    const totDeepC = d.reduce((s,v)=>s+v.deep_call_open,0);
+    const totDeepP = d.reduce((s,v)=>s+v.deep_put_open,0);
+    
+    document.getElementById('stats-bar').innerHTML = `
+        <div class="stat-card"><div class="num blue">${d.length}</div><div class="label">交易日</div></div>
+        <div class="stat-card"><div class="num green">${(totalCall/1000).toFixed(0)}K</div><div class="label">CALL总开仓</div></div>
+        <div class="stat-card"><div class="num red">${(totalPut/1000).toFixed(0)}K</div><div class="label">PUT总开仓</div></div>
+        <div class="stat-card"><div class="num orange">${(totDeepC/1000).toFixed(0)}K</div><div class="label">深虚CALL(投机)</div></div>
+        <div class="stat-card"><div class="num">${(totOtmP/1000).toFixed(0)}K</div><div class="label">虚值PUT(保护)</div></div>
+        <div class="stat-card"><div class="num yellow">${d[d.length-1].etf}</div><div class="label">最新ETF</div></div>
+    `;
+    
+    function makeTooltip(pref){
+        return function(params){
+            const idx = params[0].dataIndex;
+            const day = d[idx];
+            let html = `<div style="font-weight:700;margin-bottom:4px">${day.date}</div>`;
+            html += `ETF: <span style="color:#4ade80">${day.etf.toFixed(3)}</span><br>`;
+            html += pref(day);
+            return html;
+        };
+    }
+    
+    function baseGrid(b) { return {left:50,right:20,top:10,bottom:b}; }
+    
+    // === 图表A: 区域堆叠净方向 ===
+    const c1 = echarts.init(document.getElementById('c-a'));
+    c1.setOption({
+        tooltip: {
+            trigger: 'axis', axisPointer: {type:'cross'},
+            backgroundColor: 'rgba(22,33,62,0.95)',
+            borderColor: '#333',
+            textStyle: {color:'#eee',fontSize:11},
+            formatter: function(params){
+                const idx = params[0].dataIndex;
+                const day = d[idx];
+                let html = `<div style="font-weight:700;margin-bottom:4px">${day.date}</div>`;
+                html += `ETF: <span style="color:#4ade80">${day.etf.toFixed(3)}</span><br>`;
+                html += `<span style="color:#38bdf8">ATM净方向:</span> ${day.atm_net > 0 ? '+':''}${day.atm_net.toLocaleString()}<br>`;
+                html += `<span style="color:#fb923c">OTM净方向:</span> ${day.otm_net > 0 ? '+':''}${day.otm_net.toLocaleString()}<br>`;
+                html += `<span style="color:#e94560">深虚净方向:</span> ${day.deep_net > 0 ? '+':''}${day.deep_net.toLocaleString()}<br>`;
+                html += `<span style="color:#facc15">总净方向:</span> ${day.total_net > 0 ? '+':''}${day.total_net.toLocaleString()}`;
+                return html;
+            }
+        },
+        legend: {
+            data: ['ETF收盘','ATM净','OTM虚值','深虚CALL投机','总净方向'],
+            bottom: 28, textStyle: {color:'#999',fontSize:11},
+            icon: 'roundRect', itemWidth: 14, itemHeight: 8
+        },
+        dataZoom: [{
+            type:'inside',start:0,end:100
+        },{
+            type:'slider',bottom:0,height:20,borderColor:'#333',
+            fillerColor:'rgba(56,189,248,0.1)',
+            textStyle:{color:'#888',fontSize:10}
+        }],
+        grid: {left:60,right:20,top:10,bottom:50},
+        xAxis: {
+            type: 'category', data: dates,
+            axisLabel: {color:'#666',fontSize:10,rotate:45},
+            axisLine: {lineStyle:{color:'#333'}},
+            splitLine: {show:false}
+        },
+        yAxis: [
+            {
+                type: 'value', name: 'ETF',
+                nameTextStyle: {color:'#4ade80',fontSize:10},
+                axisLabel: {color:'#4ade80',fontSize:10,formatter:v=>v.toFixed(1)},
+                splitLine: {lineStyle:{color:'#222',type:'dashed'}},
+                min: Math.floor(Math.min(...etf)*10)/10 - 0.2,
+                max: Math.ceil(Math.max(...etf)*10)/10 + 0.2
+            },
+            {
+                type: 'value', name: '开仓净额',
+                nameTextStyle: {color:'#facc15',fontSize:10},
+                axisLabel: {color:'#facc15',fontSize:9,formatter:v=>{if(Math.abs(v)>=1000) return (v/1000).toFixed(0)+'k'; return v}},
+                splitLine: {show:false}
+            }
+        ],
+        series: [
+            {
+                name: 'ETF收盘', type: 'line',
+                data: etf, yAxisIndex: 0, smooth: true,
+                lineStyle: {width:2,color:'#4ade80'},
+                itemStyle: {color:'#4ade80'},
+                symbol: 'none', z: 10
+            },
+            {
+                name: 'ATM净', type: 'bar', stack: 'net', yAxisIndex: 1,
+                data: atmNet, 
+                itemStyle: {color:'rgba(56,189,248,0.6)',borderRadius:[1,1,0,0]},
+                barWidth: '70%', z: 5
+            },
+            {
+                name: 'OTM虚值', type: 'bar', stack: 'net', yAxisIndex: 1,
+                data: otmNet,
+                itemStyle: {color:'rgba(251,191,36,0.7)',borderRadius:[1,1,0,0]},
+                barWidth: '70%', z: 5
+            },
+            {
+                name: '深虚CALL投机', type: 'bar', stack: 'net', yAxisIndex: 1,
+                data: deepNet,
+                itemStyle: {color:'rgba(233,69,96,0.8)',borderRadius:[1,1,0,0]},
+                barWidth: '70%', z: 5
+            },
+            {
+                name: '总净方向', type: 'line', yAxisIndex: 1,
+                data: totalNet, smooth: true,
+                lineStyle: {width:2,color:'#facc15',type:'dashed'},
+                itemStyle: {color:'#facc15'},
+                symbol: 'none', z: 12
+            }
+        ]
+    });
+    window.addEventListener('resize', ()=>c1.resize());
+    
+    // === 图表B: 时间维度的净方向 ===
+    const c2 = echarts.init(document.getElementById('c-b'));
+    c2.setOption({
+        tooltip: {
+            trigger: 'axis', axisPointer: {type:'cross'},
+            backgroundColor: 'rgba(22,33,62,0.95)',
+            borderColor: '#333',
+            textStyle: {color:'#eee',fontSize:11},
+            formatter: function(params){
+                const idx = params[0].dataIndex;
+                const day = d[idx];
+                let html = `<div style="font-weight:700;margin-bottom:4px">${day.date}</div>`;
+                html += `ETF: <span style="color:#4ade80">${day.etf.toFixed(3)}</span><br>`;
+                params.forEach(p=>{
+                    if(p.seriesName !== 'ETF收盘'){
+                        const v = d[idx][p.seriesName+'_net'];
+                        html += `${p.marker} ${p.seriesName}: ${v > 0 ? '+':''}${v.toLocaleString()}<br>`;
+                    }
+                });
+                return html;
+            }
+        },
+        legend: {
+            data: ['当月M1','次月M2','远月M3+','ETF收盘'],
+            bottom: 28, textStyle: {color:'#999',fontSize:11},
+            icon: 'roundRect', itemWidth: 14, itemHeight: 8
+        },
+        dataZoom: [{
+            type:'inside',start:0,end:100
+        },{
+            type:'slider',bottom:0,height:20,borderColor:'#333',
+            fillerColor:'rgba(56,189,248,0.1)',
+            textStyle:{color:'#888',fontSize:10}
+        }],
+        grid: {left:60,right:20,top:10,bottom:50},
+        xAxis: {
+            type: 'category', data: dates,
+            axisLabel: {color:'#666',fontSize:10,rotate:45},
+            axisLine: {lineStyle:{color:'#333'}},
+            splitLine: {show:false}
+        },
+        yAxis: [
+            {
+                type: 'value', name: 'ETF',
+                nameTextStyle: {color:'#4ade80',fontSize:10},
+                axisLabel: {color:'#4ade80',fontSize:10,formatter:v=>v.toFixed(1)},
+                splitLine: {lineStyle:{color:'#222',type:'dashed'}},
+                min: Math.floor(Math.min(...etf)*10)/10 - 0.2,
+                max: Math.ceil(Math.max(...etf)*10)/10 + 0.2
+            },
+            {
+                type: 'value', name: '开仓净额',
+                nameTextStyle: {color:'#aaa',fontSize:10},
+                axisLabel: {color:'#aaa',fontSize:9,formatter:v=>{if(Math.abs(v)>=1000) return (v/1000).toFixed(0)+'k'; return v}},
+                splitLine: {show:false}
+            }
+        ],
+        series: [
+            {
+                name: '当月M1', type: 'bar', stack: 'tm', yAxisIndex: 1,
+                data: m1n,
+                itemStyle: {color:'rgba(56,189,248,0.6)'},
+                barWidth: '70%', z: 5
+            },
+            {
+                name: '次月M2', type: 'bar', stack: 'tm', yAxisIndex: 1,
+                data: m2n,
+                itemStyle: {color:'rgba(251,191,36,0.6)'},
+                barWidth: '70%', z: 5
+            },
+            {
+                name: '远月M3+', type: 'bar', stack: 'tm', yAxisIndex: 1,
+                data: m3pn,
+                itemStyle: {color:'rgba(233,69,96,0.6)'},
+                barWidth: '70%', z: 5
+            },
+            {
+                name: 'ETF收盘', type: 'line', yAxisIndex: 0,
+                data: etf, smooth: true,
+                lineStyle: {width:2,color:'#4ade80'},
+                symbol: 'none', z: 12
+            }
+        ]
+    });
+    window.addEventListener('resize', ()=>c2.resize());
+    
+    // === 图表C: OTM vs 深虚CALL（两个主要驱动力） ===
+    const callDeep = d.map(v=>v.deep_call_open);
+    const putOtm = d.map(v=>v.otm_put_open);
+    const totOpen = d.map(v=>v.total_call_open + v.total_put_open);
+    
+    const c3 = echarts.init(document.getElementById('c-c'));
+    c3.setOption({
+        tooltip: {
+            trigger: 'axis', axisPointer: {type:'cross'},
+            backgroundColor: 'rgba(22,33,62,0.95)',
+            borderColor: '#333',
+            textStyle: {color:'#eee',fontSize:11},
+            formatter: function(params){
+                const idx = params[0].dataIndex;
+                const day = d[idx];
+                let html = `<div style="font-weight:700;margin-bottom:4px">${day.date}</div>`;
+                html += `ETF: <span style="color:#4ade80">${day.etf.toFixed(3)}</span><br>`;
+                params.forEach(p=>{
+                    if(p.seriesName === '深虚CALL(投机)'){
+                        html += `${p.marker} ${p.seriesName}: ${p.value.toLocaleString()}<br>`;
+                    } else if(p.seriesName === '虚值PUT(保护)'){
+                        html += `${p.marker} ${p.seriesName}: ${p.value.toLocaleString()}<br>`;
+                    } else if(p.seriesName === '投机/保护比'){
+                        const r = day.otm_put_open > 0 ? (day.deep_call_open / day.otm_put_open).toFixed(2) : '∞';
+                        html += `${p.marker} ${p.seriesName}: ${r}x<br>`;
+                    }
+                });
+                return html;
+            }
+        },
+        legend: {
+            data: ['深虚CALL(投机)','虚值PUT(保护)','投机/保护比','ETF收盘'],
+            bottom: 28, textStyle: {color:'#999',fontSize:11},
+            icon: 'roundRect', itemWidth: 14, itemHeight: 8
+        },
+        dataZoom: [{
+            type:'inside',start:0,end:100
+        },{
+            type:'slider',bottom:0,height:20,borderColor:'#333',
+            fillerColor:'rgba(56,189,248,0.1)',
+            textStyle:{color:'#888',fontSize:10}
+        }],
+        grid: {left:60,right:50,top:10,bottom:50},
+        xAxis: {
+            type: 'category', data: dates,
+            axisLabel: {color:'#666',fontSize:10,rotate:45},
+            axisLine: {lineStyle:{color:'#333'}},
+            splitLine: {show:false}
+        },
+        yAxis: [
+            {
+                type: 'value', name: '开仓量',
+                nameTextStyle: {color:'#aaa',fontSize:10},
+                axisLabel: {color:'#aaa',fontSize:9,formatter:v=>{if(Math.abs(v)>=1000) return (v/1000).toFixed(0)+'k'; return v}},
+                splitLine: {lineStyle:{color:'#222',type:'dashed'}}
+            },
+            {
+                type: 'value', name: '比',
+                nameTextStyle: {color:'#fb923c',fontSize:10},
+                axisLabel: {color:'#fb923c',fontSize:9},
+                splitLine: {show:false},
+                min: 0
+            }
+        ],
+        series: [
+            {
+                name: '深虚CALL(投机)', type: 'bar', yAxisIndex: 0,
+                data: callDeep,
+                itemStyle: {color:'rgba(233,69,96,0.7)',borderRadius:[1,1,0,0]},
+                barWidth: '70%', z: 5
+            },
+            {
+                name: '虚值PUT(保护)', type: 'bar', yAxisIndex: 0,
+                data: putOtm,
+                itemStyle: {color:'rgba(56,189,248,0.5)',borderRadius:[1,1,0,0]},
+                barWidth: '70%', z: 4
+            },
+            {
+                name: '投机/保护比', type: 'line', yAxisIndex: 1,
+                data: d.map(v=>v.otm_put_open > 0 ? +(v.deep_call_open / v.otm_put_open).toFixed(2) : null),
+                smooth: true,
+                lineStyle: {width:2,color:'#fb923c'},
+                itemStyle: {color:'#fb923c'},
+                symbol: 'none', z: 12
+            },
+            {
+                name: 'ETF收盘', type: 'line', yAxisIndex: 0,
+                data: etf, smooth: true,
+                lineStyle: {width:1.5,color:'rgba(74,222,128,0.5)',type:'dashed'},
+                symbol: 'none', z: 8
+            }
+        ]
+    });
+    window.addEventListener('resize', ()=>c3.resize());
+    
+}).catch(e=>{
+    document.body.innerHTML = '<p style="color:red;padding:40px">加载失败: '+e.message+'</p>';
+    console.error(e);
+});
+</script>
+</body></html>
