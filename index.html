@@ -132,7 +132,7 @@ body { font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif; backgr
             afterBody: function(ctx) {
               const i = ctx[0].dataIndex;
               const dl = {strong_bullish:'强偏多',bullish:'偏多',none:'中性',bearish:'偏空',strong_bearish:'强偏空',panic_dominant:'恐慌主导'};
-              return `方向: ${dl[s.direction[i]] || s.direction[i]}`;
+              return `方向: ${dl[s.direction[i]] || s.direction[i]} | ${({high:"🟢高可信",medium:"🟡中可信",low:"🔴低可信"})[s.signal_confidence?.[i]||"low"]}`;
             }
           }
         }
