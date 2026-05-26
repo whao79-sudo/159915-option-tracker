@@ -1,55 +1,128 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>159915 模块指标 vs ETF走势</title>
+<title>N模块 · IV/HV比率 vs ETF</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,'Microsoft YaHei',sans-serif;padding:20px}
-h1{text-align:center;font-size:20px;margin-bottom:20px;color:#eee}
+h1{text-align:center;font-size:18px;margin:0 0 8px 0;color:#eee}
+.sub{text-align:center;font-size:12px;color:#666;margin-bottom:20px}
 .container{max-width:1200px;margin:0 auto}
 .chart-box{background:#16213e;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
-.chart-box h2{font-size:14px;color:#888;margin-bottom:8px;font-weight:400}
-.chart{width:100%;height:300px}
-.info{background:#0f3460;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.6}
-.info strong{color:#e94560}
+.chart{width:100%;height:420px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.stat-card{flex:1;min-width:120px;background:#16213e;border-radius:8px;padding:10px 14px;text-align:center}
+.stat-card .num{font-size:22px;font-weight:700;color:#e94560}
+.stat-card .num.green{color:#4ade80}
+.stat-card .num.yellow{color:#facc15}
+.stat-card .num.blue{color:#38bdf8}
+.stat-card .label{font-size:11px;color:#888;margin-top:2px}
+.info-box{background:#0f3460;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:12px;line-height:1.7;color:#aaa}
+.info-box strong{color:#e94560}
+.info-box .green{color:#4ade80}
 </style>
 </head><body>
 <div class="container">
-<h1>159915 四模块指标 vs ETF 收盘价 (92天)</h1>
+<h1>N模块 · IV/HV比率 vs ETF收盘价</h1>
+<div class="sub">数据源: IVFS 平值CALL合约 ±5% | 159915 ETF日线 | 88个交易日</div>
 
-<div class="info">
-📌 <strong>N模块</strong> — IV/HV百分位 | <strong>J模块</strong> — GEX(万) 净偏度 | <strong>M模块</strong> — CALL/PUT净仓差 | <strong>I模块</strong> — PCR量/仓 + 分裂方向<br>
-🟢 绿色线=ETF收盘价 | 其他颜色=各模块指标 | 竖线标注=模块极端值
+<div class="stats">
+<div class="stat-card"><div class="num blue" id="days">88</div><div class="label">交易日</div></div>
+<div class="stat-card"><div class="num yellow" id="cur-ratio">?</div><div class="label">最新IV/HV比</div></div>
+<div class="stat-card"><div class="num" id="iv-range">?</div><div class="label">IV范围(平值)</div></div>
+<div class="stat-card"><div class="num green" id="cur-etf">?</div><div class="label">最新ETF</div></div>
 </div>
 
-<div id="chart-N" class="chart-box"><h2>📊 N模块: IV/HV百分位 vs ETF</h2><div id="c-N" class="chart"></div></div>
-<div id="chart-J" class="chart-box"><h2>📊 J模块: GEX(万) 净偏度 vs ETF</h2><div id="c-J" class="chart"></div></div>
-<div id="chart-M" class="chart-box"><h2>📊 M模块: CALL/PUT净仓差 vs ETF</h2><div id="c-M" class="chart"></div></div>
-<div id="chart-I" class="chart-box"><h2>📊 I模块: PCR量/仓 + 分裂% vs ETF</h2><div id="c-I" class="chart"></div></div>
-
+<div class="info-box">
+📌 上区: <strong>ETF收盘价</strong> (绿线) + <strong>IV/HV滚动百分位</strong> (橙线+面积)<br>
+📌 下区: <strong>IV/HV比率</strong> (蓝柱) + <strong>IV</strong> (红折线) + <strong>HV30</strong> (灰折线)<br>
+<span class="green">⚪</span> IV/HV比P50=中性 &nbsp; <span class="green">⬆</span> 低于P50=IV溢价 &nbsp; <span class="green">⬇</span> 高于P50=IV折价<br>
+百分位: 60日滚动窗口
 </div>
+
+<div id="main-chart" class="chart-box"><div id="c-main" class="chart"></div></div>
+</div>
+
 <script>
-fetch('./module_series.json').then(r=>r.json()).then(d=>{
-    const dates = d.dates;
-    const etf = d.series.etf_close;
+fetch('./n_module_data.json').then(r=>r.json()).then(d=>{
+    if(!d||!d.length){document.body.innerHTML='<p style="color:red;padding:40px">数据为空</p>';return}
     
-    // 翻译日期为MM/DD
-    const labels = dates.map((v,i) => {
-        if(i===0 || i===dates.length-1 || i%5===0 || v.endsWith('22')||v.endsWith('07')||v.endsWith('28')||v.endsWith('21')) return v.slice(0,2)+'/'+v.slice(2);
-        return '';
-    });
-
-    // ETF归一化显示
-    const etfMin = Math.min(...etf.filter(v=>v!==null));
-    const etfMax = Math.max(...etf.filter(v=>v!==null));
-    const etfRange = etfMax - etfMin;
-
-    function makeChart(domId, seriesList, yName, opts={}) {
-        const dom = document.getElementById(domId);
-        const chart = echarts.init(dom);
-        
-        const series = [
+    const dates = d.map(v=>v.date.slice(5));
+    const etf = d.map(v=>v.etf);
+    const pct = d.map(v=>v.pct);
+    const ratio = d.map(v=>v.ratio);
+    const iv = d.map(v=>v.iv);
+    const hv = d.map(v=>v.hv);
+    
+    // 极值
+    const etfMin = Math.min(...etf), etfMax = Math.max(...etf);
+    const ratioMin = Math.min(...ratio), ratioMax = Math.max(...ratio);
+    
+    // 统计
+    document.getElementById('days').textContent = d.length;
+    const last = d[d.length-1];
+    document.getElementById('cur-ratio').textContent = last.ratio.toFixed(4);
+    document.getElementById('iv-range').textContent = (Math.min(...iv)*100).toFixed(1)+'% ~ '+(Math.max(...iv)*100).toFixed(1)+'%';
+    document.getElementById('cur-etf').textContent = last.etf.toFixed(3);
+    
+    // 主图 (上) ETF + 百分位
+    const chart1 = echarts.init(document.getElementById('c-main'));
+    
+    // P50线
+    const p50Line = [];
+    for(let i=0;i<dates.length;i++) p50Line.push(50);
+    
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {type:'cross'},
+            backgroundColor: 'rgba(22,33,62,0.95)',
+            borderColor: '#333',
+            textStyle: {color:'#eee',fontSize:12},
+            formatter: function(params) {
+                const p = params[0];
+                const idx = p.dataIndex;
+                const day = d[idx];
+                let html = `<div style="font-weight:700;margin-bottom:4px">${day.date}</div>`;
+                html += `ETF: <span style="color:#4ade80">${day.etf.toFixed(3)}</span><br>`;
+                html += `IV/HV比: <span style="color:#38bdf8">${day.ratio.toFixed(4)}</span><br>`;
+                html += `百分位: <span style="color:#f59e0b">${day.pct}%</span><br>`;
+                html += `IV: ${(day.iv*100).toFixed(2)}% | HV30: ${(day.hv*100).toFixed(2)}%`;
+                return html;
+            }
+        },
+        legend: {
+            data: ['ETF收盘', 'IV/HV百分位', 'P50中性'],
+            bottom: 0, textStyle: {color:'#999',fontSize:11},
+            icon: 'roundRect', itemWidth: 14, itemHeight: 8
+        },
+        grid: {left:50,right:20,top:10,bottom:40},
+        xAxis: {
+            type: 'category', data: dates,
+            axisLabel: {color:'#666',fontSize:10,rotate:45,interval:4},
+            axisLine: {lineStyle:{color:'#333'}},
+            splitLine: {show:false}
+        },
+        yAxis: [
+            {
+                type: 'value',
+                name: 'ETF',
+                nameTextStyle: {color:'#4ade80',fontSize:10},
+                axisLabel: {color:'#4ade80',fontSize:10,formatter:v=>v.toFixed(2)},
+                splitLine: {lineStyle:{color:'#222',type:'dashed'}},
+                min: etfMin - 0.2, max: etfMax + 0.2
+            },
+            {
+                type: 'value',
+                name: '百分位(%)',
+                nameTextStyle: {color:'#f59e0b',fontSize:10},
+                axisLabel: {color:'#f59e0b',fontSize:10,formatter:'{value}%'},
+                min: 0, max: 105,
+                splitLine: {show:false}
+            }
+        ],
+        series: [
             {
                 name: 'ETF收盘',
                 type: 'line',
@@ -61,158 +134,148 @@ fetch('./module_series.json').then(r=>r.json()).then(d=>{
                 symbol: 'none',
                 z: 10
             },
-            ...seriesList
-        ];
-        
-        const option = {
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {type:'cross'},
-                backgroundColor: 'rgba(22,33,62,0.9)',
-                borderColor: '#333',
-                textStyle: {color:'#eee',fontSize:12}
-            },
-            legend: {
-                data: series.map(s=>s.name),
-                bottom: 0,
-                textStyle: {color:'#999',fontSize:11},
-                icon: 'roundRect',
-                itemWidth: 14,
-                itemHeight: 8
-            },
-            grid: {left:50,right:20,top:10,bottom:40},
-            xAxis: {
-                type: 'category',
-                data: labels,
-                axisLabel: {color:'#666',fontSize:10,rotate:45},
-                axisLine: {lineStyle:{color:'#333'}},
-                splitLine: {show:false}
-            },
-            yAxis: [
-                {
-                    type: 'value',
-                    name: 'ETF',
-                    nameTextStyle: {color:'#4ade80',fontSize:10},
-                    axisLabel: {color:'#4ade80',fontSize:10,formatter:v=>v.toFixed(2)},
-                    splitLine: {lineStyle:{color:'#222',type:'dashed'}},
-                    min: etfMin - etfRange*0.1,
-                    max: etfMax + etfRange*0.1
+            {
+                name: 'IV/HV百分位',
+                type: 'line',
+                data: pct,
+                yAxisIndex: 1,
+                smooth: true,
+                lineStyle: {width:2,color:'#f59e0b'},
+                itemStyle: {color:'#f59e0b'},
+                symbol: 'none',
+                areaStyle: {
+                    color: {
+                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [
+                            {offset: 0, color: 'rgba(245,158,11,0.3)'},
+                            {offset: 0.5, color: 'rgba(245,158,11,0.08)'},
+                            {offset: 1, color: 'rgba(245,158,11,0)'}
+                        ]
+                    }
                 },
-                {
-                    type: 'value',
-                    name: yName,
-                    nameTextStyle: {color:'#e94560',fontSize:10},
-                    axisLabel: {color:'#e94560',fontSize:10},
-                    splitLine: {show:false}
-                }
-            ],
-            series: series
-        };
-        
-        if (opts.markLines) {
-            option.series[0].markLine = opts.markLines;
-        }
-        
-        chart.setOption(option);
-        window.addEventListener('resize', ()=>chart.resize());
-        return chart;
-    }
-
-    // --- N: IV/HV百分位 ---
-    makeChart('c-N', [{
-        name: 'IV/HV%',
-        type: 'line',
-        data: d.series.iv_hv_pct,
-        yAxisIndex: 1,
-        smooth: true,
-        lineStyle: {width:2,color:'#f59e0b'},
-        itemStyle: {color:'#f59e0b'},
-        symbol: 'none',
-        areaStyle: {color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(245,158,11,0.2)'},{offset:1,color:'rgba(245,158,11,0)'}]}}
-    }], 'IV/HV%');
-
-    // --- J: GEX 净偏度 ---
-    const gex = d.series.gex_wan;
-    const gexColors = gex.map(v => {
-        if (v === null) return '#333';
-        return v >= 40 ? '#ff6b6b' : v >= 25 ? '#f59e0b' : '#4ade80';
-    });
-    makeChart('c-J', [{
-        name: 'GEX(万)',
-        type: 'bar',
-        data: gex,
-        yAxisIndex: 1,
-        itemStyle: {
-            color: params => {
-                const v = gex[params.dataIndex];
-                if (v === null) return '#333';
-                return v >= 40 ? '#ff6b6b' : v >= 25 ? '#f59e0b' : '#4ade80';
+                z: 5
             },
-            opacity: 0.7
-        }
-    }], 'GEX(万)');
-
-    // --- M: CALL/PUT 仓差 ---
-    const callC = d.series.call_cangcha;
-    const putC = d.series.put_cangcha;
-    makeChart('c-M', [
-        {
-            name: 'CALL仓差',
-            type: 'bar',
-            data: callC,
-            yAxisIndex: 1,
-            itemStyle: {color:'rgba(34,197,94,0.6)'}
-        },
-        {
-            name: 'PUT仓差',
-            type: 'bar',
-            data: putC,
-            yAxisIndex: 1,
-            itemStyle: {color:'rgba(239,68,68,0.6)'}
-        }
-    ], '净仓差');
-
-    // --- I: PCR + 分裂 ---
-    const split = d.series.split_pct;
-    const splitColors = split.map(v => {
-        if (v === null) return '#666';
-        return v > 0 ? '#22d3ee' : '#fb7185';
-    });
-    makeChart('c-I', [
-        {
-            name: 'PCR量',
-            type: 'line',
-            data: d.series.vol_pcr,
-            yAxisIndex: 1,
-            smooth: true,
-            lineStyle: {width:1.5,color:'#a78bfa',type:'dashed'},
-            itemStyle: {color:'#a78bfa'},
-            symbol: 'none'
-        },
-        {
-            name: 'PCR仓',
-            type: 'line',
-            data: d.series.oi_pcr,
-            yAxisIndex: 1,
-            smooth: true,
-            lineStyle: {width:1.5,color:'#f472b6',type:'dashed'},
-            itemStyle: {color:'#f472b6'},
-            symbol: 'none'
-        },
-        {
-            name: '分裂%',
-            type: 'bar',
-            data: split,
-            yAxisIndex: 1,
-            itemStyle: {
-                color: params => splitColors[params.dataIndex],
-                opacity: 0.5
+            {
+                name: 'P50中性',
+                type: 'line',
+                data: p50Line,
+                yAxisIndex: 1,
+                lineStyle: {width:1,color:'#555',type:'dashed'},
+                symbol: 'none',
+                z: 1
             }
-        }
-    ], 'PCR/分裂%');
-
-}).catch(e => {
-    document.body.innerHTML = '<p style="color:red">加载数据失败: '+e.message+'</p>';
+        ]
+    };
+    
+    chart1.setOption(option);
+    window.addEventListener('resize', ()=>{chart1.resize()});
+    
+    // ======== 下区：IV vs HV 对比 ========
+    // 在同一个容器里用第二个chart
+    // 实际上只用一个chart，但用custom系列展示
+    // 加辅助sub-chart用div显示
+    const chartBox = document.querySelector('.chart-box');
+    const subDiv = document.createElement('div');
+    subDiv.id = 'c-sub';
+    subDiv.className = 'chart';
+    subDiv.style.height = '300px';
+    chartBox.insertAdjacentElement('afterend', subDiv);
+    
+    const chart2 = echarts.init(document.getElementById('c-sub'));
+    
+    const colors = ratio.map(v => {
+        if (v > 1.15) return 'rgba(239,68,68,0.6)';
+        if (v < 0.85) return 'rgba(52,211,153,0.6)';
+        return 'rgba(56,189,248,0.4)';
+    });
+    
+    const option2 = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {type:'cross'},
+            backgroundColor: 'rgba(22,33,62,0.95)',
+            borderColor: '#333',
+            textStyle: {color:'#eee',fontSize:12},
+            formatter: function(params) {
+                const idx = params[0].dataIndex;
+                const day = d[idx];
+                let html = `<div style="font-weight:700;margin-bottom:4px">${day.date}</div>`;
+                html += `IV/HV比: <span style="color:#38bdf8">${day.ratio.toFixed(4)}</span><br>`;
+                html += `IV: <span style="color:#ef4444">${(day.iv*100).toFixed(2)}%</span><br>`;
+                html += `HV30: <span style="color:#9ca3af">${(day.hv*100).toFixed(2)}%</span>`;
+                return html;
+            }
+        },
+        legend: {
+            data: ['IV/HV比', 'IV', 'HV30'],
+            bottom: 0, textStyle: {color:'#999',fontSize:11},
+            icon: 'roundRect', itemWidth: 14, itemHeight: 8
+        },
+        grid: {left:50,right:20,top:10,bottom:40},
+        xAxis: {
+            type: 'category', data: dates,
+            axisLabel: {color:'#666',fontSize:10,rotate:45,interval:4},
+            axisLine: {lineStyle:{color:'#333'}},
+            splitLine: {show:false}
+        },
+        yAxis: [
+            {
+                type: 'value',
+                name: 'IV/HV比',
+                nameTextStyle: {color:'#38bdf8',fontSize:10},
+                axisLabel: {color:'#38bdf8',fontSize:10,formatter:v=>v.toFixed(2)},
+                splitLine: {lineStyle:{color:'#222',type:'dashed'}},
+                min: Math.max(ratioMin - 0.2, 0),
+                max: ratioMax + 0.2
+            },
+            {
+                type: 'value',
+                name: '波动率(%)',
+                nameTextStyle: {color:'#ef4444',fontSize:10},
+                axisLabel: {color:'#ef4444',fontSize:10,formatter:'{value}%'},
+                min: 0, max: 50,
+                splitLine: {show:false}
+            }
+        ],
+        series: [
+            {
+                name: 'IV/HV比',
+                type: 'bar',
+                data: ratio,
+                yAxisIndex: 0,
+                itemStyle: {color: params => colors[params.dataIndex], borderRadius:[2,2,0,0]},
+                z: 10
+            },
+            {
+                name: 'IV',
+                type: 'line',
+                data: iv.map(v => v * 100),
+                yAxisIndex: 1,
+                smooth: true,
+                lineStyle: {width:2,color:'rgba(239,68,68,0.7)'},
+                itemStyle: {color:'#ef4444'},
+                symbol: 'none',
+                z: 8
+            },
+            {
+                name: 'HV30',
+                type: 'line',
+                data: hv.map(v => v * 100),
+                yAxisIndex: 1,
+                smooth: true,
+                lineStyle: {width:1.5,color:'rgba(156,163,175,0.6)',type:'dashed'},
+                itemStyle: {color:'#9ca3af'},
+                symbol: 'none',
+                z: 5
+            }
+        ]
+    };
+    
+    chart2.setOption(option2);
+    window.addEventListener('resize', ()=>{chart2.resize()});
+    
+}).catch(e=>{
+    document.body.innerHTML = '<p style="color:red;padding:40px">加载失败: '+e.message+'</p>';
     console.error(e);
 });
 </script>
