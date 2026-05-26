@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "159915 创业板ETF期权预警 — 多空追踪",
+    "title": "159915 创业板ETF期权 — 多空追踪",
     "etf_name": "159915 创业板ETF",
     "total_days": 5,
     "date_range": {
@@ -110,20 +110,6 @@
       0,
       50366735.0
     ],
-    "direction": [
-      "none",
-      "none",
-      "none",
-      "none",
-      "none"
-    ],
-    "direction_label": [
-      "中性",
-      "中性",
-      "中性",
-      "中性",
-      "中性"
-    ],
     "iv_hv_pct": [
       0,
       0,
@@ -151,6 +137,20 @@
       3,
       3,
       0
+    ],
+    "direction": [
+      "none",
+      "none",
+      "none",
+      "none",
+      "none"
+    ],
+    "direction_label": [
+      "中性",
+      "中性",
+      "中性",
+      "中性",
+      "中性"
     ]
   }
 }
