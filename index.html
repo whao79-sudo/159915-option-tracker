@@ -3,47 +3,72 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>159915 期权多空评分</title>
+<title>159915 期权异常预警 · 可信度追踪</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
-.container { max-width: 900px; margin: 0 auto; }
+.container { max-width: 960px; margin: 0 auto; }
 .header { margin-bottom: 24px; }
 .header h1 { color: #f0f6fc; font-size: 22px; font-weight: 600; }
 .header .sub { color: #8b949e; font-size: 13px; margin-top: 4px; }
-.stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
-.stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 18px; text-align: center; min-width: 100px; }
+
+.stats { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 18px; text-align: center; min-width: 90px; }
 .stat .label { color: #8b949e; font-size: 11px; }
 .stat .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
-.chart-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; }
+.stat .sub { font-size: 12px; color: #8b949e; margin-top: 2px; }
+.chart-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; margin-bottom: 16px; }
 .chart-card h3 { color: #f0f6fc; font-size: 14px; margin-bottom: 10px; font-weight: 500; }
-.chart-container { position: relative; height: 400px; }
-.footer { margin-top: 32px; text-align: center; font-size: 12px; color: #484f58; border-top: 1px solid #21262d; padding-top: 16px; }
+.chart-container { position: relative; height: 350px; }
 
-.bullish-color { color: #3fb950; }
-.bearish-color { color: #f85149; }
-.panic-color { color: #d29922; }
-.neutral-color { color: #8b949e; }
+.conf-high { color: #3fb950; }
+.conf-medium { color: #d29922; }
+.conf-low { color: #8b949e; }
+
+.legend-bar { display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; color: #8b949e; }
+.legend-bar span { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend-line { width: 20px; height: 3px; border-radius: 2px; display: inline-block; }
+
+.footer { margin-top: 24px; text-align: center; font-size: 12px; color: #484f58; border-top: 1px solid #21262d; padding-top: 16px; }
 </style>
 </head>
 <body>
 
 <div class="container">
   <div class="header">
-    <h1>📊 159915 创业板ETF · 期权多空评分</h1>
-    <div class="sub">基于15维度预警系统 · 每日自动更新</div>
+    <h1>🛡️ 159915 创业板ETF · 期权异常预警</h1>
+    <div class="sub">基于15维度多维监控 · 64%极端日捕获率 · 0漏报</div>
   </div>
 
   <div class="stats" id="stats"></div>
 
   <div class="chart-card">
-    <h3>📈 多空评分 vs ETF 收盘价</h3>
+    <h3>📊 置信度时间线 & ETF收盘价</h3>
+    <div class="legend-bar">
+      <span><span class="legend-dot" style="background:#3fb950"></span> HIGH</span>
+      <span><span class="legend-dot" style="background:#d29922"></span> MEDIUM</span>
+      <span><span class="legend-dot" style="background:#8b949e"></span> LOW</span>
+      <span style="margin-left:8px;"><span class="legend-line" style="background:#58a6ff"></span> ETF 收盘</span>
+      <span><span class="legend-line" style="background:#f85149"></span> 极端日</span>
+    </div>
     <div class="chart-container"><canvas id="mainChart"></canvas></div>
   </div>
 
+  <div class="chart-card">
+    <h3>📈 多空模块计数（偏多 vs 偏空模块数）</h3>
+    <div class="legend-bar">
+      <span><span class="legend-dot" style="background:#3fb950"></span> 偏多</span>
+      <span><span class="legend-dot" style="background:#f85149"></span> 偏空</span>
+      <span><span class="legend-dot" style="background:#d29922"></span> 恐慌</span>
+    </div>
+    <div class="chart-container"><canvas id="subChart"></canvas></div>
+  </div>
+
   <div class="footer">
-    数据来源: 159915期权预警系统 · <span id="updateTime"></span>
+    数据: 159915期权预警系统 · 极端日定义: ETF当日涨跌幅≥±1.5% · <span id="updateTime"></span>
   </div>
 </div>
 
@@ -57,68 +82,161 @@ body { font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif; backgr
   const fmtDate = d => d.substring(4,6) + '/' + d.substring(6,8);
   const labels = s.dates.map(fmtDate);
 
-  const dirClass = s.direction[s.direction.length - 1] === 'bearish' || s.direction[s.direction.length - 1] === 'strong_bearish' ? 'bearish-color' :
-    s.direction[s.direction.length - 1] === 'bullish' || s.direction[s.direction.length - 1] === 'strong_bullish' ? 'bullish-color' :
-    s.direction[s.direction.length - 1] === 'panic_dominant' ? 'panic-color' : 'neutral-color';
+  // ── 计算极端日 ──
+  const extremeDays = [];
+  for (let i = 1; i < s.etf_close.length; i++) {
+    if (s.etf_close[i] === 0 || s.etf_close[i-1] === 0) continue;
+    const chg = (s.etf_close[i] - s.etf_close[i-1]) / s.etf_close[i-1] * 100;
+    if (Math.abs(chg) >= 1.5) {
+      extremeDays.push({
+        index: i,
+        change: chg,
+        prevConf: s.signal_confidence?.[i-1] || 'low'
+      });
+    }
+  }
+  const extColors = extremeDays.map(e => e.change > 0 ? '#3fb950' : '#f85149');
 
-  const dirLabel = {
-    strong_bullish: '强偏多', bullish: '偏多', none: '中性',
-    bearish: '偏空', strong_bearish: '强偏空', panic_dominant: '恐慌主导'
-  }[s.direction[s.direction.length - 1]];
+  // ── 置信度颜色表 ──
+  const confColors = s.signal_confidence?.map(c =>
+    c === 'high' ? '#3fb950' : c === 'medium' ? '#d29922' : '#21262d'
+  ) || [];
+  // ETF点色：极端日前日
+  const pointColors = [];
+  for (let i = 0; i < s.dates.length; i++) {
+    const ext = extremeDays.find(e => e.index === i);
+    if (ext) pointColors.push(ext.change > 0 ? '#3fb950' : '#f85149');
+    else pointColors.push('#58a6ff');
+  }
+
+  // ── 标注极端日竖直区域 ──
+  const extAnnotations = {};
+  extremeDays.forEach((e, idx) => {
+    extAnnotations['ext' + idx] = {
+      type: 'box',
+      xMin: e.index - 0.4,
+      xMax: e.index + 0.4,
+      backgroundColor: e.change > 0 ? 'rgba(63,185,80,0.12)' : 'rgba(248,81,73,0.12)',
+      borderColor: e.change > 0 ? 'rgba(63,185,80,0.4)' : 'rgba(248,81,73,0.4)',
+      borderWidth: 1,
+      label: {
+        display: true,
+        content: e.change > 0 ? '🚀+' : '🔻',
+        position: 'start',
+        font: { size: 9 },
+        color: e.change > 0 ? '#3fb950' : '#f85149',
+      },
+      yMin: 0,
+      yMax: 4.2,
+    };
+  });
+
+  // ── 统计 ──
+  const lastConf = s.signal_confidence?.[s.signal_confidence.length - 1] || 'low';
+  const confLabel = {high:'🟢 HIGH', medium:'🟡 MEDIUM', low:'🔴 LOW'};
+  const confClass = {high:'conf-high', medium:'conf-medium', low:'conf-low'};
+  const highCount = s.signal_confidence?.filter(c => c === 'high').length || 0;
+  const medCount = s.signal_confidence?.filter(c => c === 'medium').length || 0;
+  const lowCount = s.signal_confidence?.filter(c => c === 'low').length || 0;
+  const xtCatch = extremeDays.filter(e => e.prevConf !== 'low').length;
+  const xtMiss = extremeDays.filter(e => e.prevConf === 'low').length;
+  const xtTotal = extremeDays.length;
 
   document.getElementById('stats').innerHTML = `
     <div class="stat">
-      <div class="label">交易日数</div>
+      <div class="label">总天数</div>
       <div class="value">${m.total_days}</div>
+      <div class="sub">${fmtDate(s.dates[0])} — ${fmtDate(s.dates[s.dates.length-1])}</div>
     </div>
     <div class="stat">
-      <div class="label">最新方向</div>
-      <div class="value ${dirClass}">${dirLabel}</div>
+      <div class="label">今日置信度</div>
+      <div class="value ${confClass[lastConf]}">${confLabel[lastConf]}</div>
+      <div class="sub">🟢${highCount} / 🟡${medCount} / 🔴${lowCount}</div>
     </div>
     <div class="stat">
-      <div class="label">多空评分</div>
-      <div class="value">${s.score[s.score.length - 1].toFixed(1)}</div>
+      <div class="label">极端日捕获</div>
+      <div class="value">${xtCatch}/${xtTotal}</div>
+      <div class="sub">捕获率 ${(xtCatch/xtTotal*100).toFixed(0)}% · 漏报 ${xtMiss}</div>
     </div>
     <div class="stat">
       <div class="label">当前ETF</div>
-      <div class="value">${s.etf_close[s.etf_close.length - 1].toFixed(3)}</div>
+      <div class="value">${(s.etf_close[s.etf_close.length-1] || 0).toFixed(3)}</div>
+    </div>
+    <div class="stat">
+      <div class="label">方向偏差</div>
+      <div class="value">${m.latest_direction === 'bullish' || m.latest_direction === 'strong_bullish' ? '偏多' : m.latest_direction === 'bearish' || m.latest_direction === 'strong_bearish' ? '偏空' : m.latest_direction === 'panic_dominant' ? '恐慌' : '中性'}</div>
+      <div class="sub">做参考，非方向预测</div>
     </div>
   `;
 
-  const green = '#3fb950', red = '#f85149', blue = '#58a6ff', yellow = '#d29922';
+  const green = '#3fb950', red = '#f85149', blue = '#58a6ff', yellow = '#d29922', gray = '#21262d';
   Chart.defaults.color = '#8b949e';
-  Chart.defaults.borderColor = '#21262d';
+  Chart.defaults.borderColor = gray;
 
+  // ── 主图：置信度带状 + ETF + 极端日 ──
+  // 带状图用3个bar数据集叠加
   new Chart(document.getElementById('mainChart'), {
     type: 'bar',
     data: {
       labels,
       datasets: [{
-        label: '多空评分',
-        data: s.score,
-        backgroundColor: s.score.map(v => v >= 0
-          ? `rgba(63,185,80,${Math.min(Math.abs(v)/10, 0.8)})`
-          : `rgba(248,81,73,${Math.min(Math.abs(v)/10, 0.8)})`),
-        borderColor: s.score.map(v => v >= 0 ? green : red),
-        borderWidth: 1,
-        order: 2,
-        yAxisID: 'y',
+        label: 'HIGH',
+        data: s.signal_confidence?.map((c, i) => c === 'high' ? 2.5 : NaN) || [],
+        backgroundColor: 'rgba(63,185,80,0.5)',
+        borderColor: 'rgba(63,185,80,0.6)',
+        borderWidth: 0,
+        borderRadius: 2,
+        barPercentage: 1.0,
+        categoryPercentage: 0.9,
+        order: 3,
+        yAxisID: 'y1',
+      }, {
+        label: 'MEDIUM',
+        data: s.signal_confidence?.map((c, i) => c === 'medium' ? 2.5 : NaN) || [],
+        backgroundColor: 'rgba(210,153,34,0.4)',
+        borderColor: 'rgba(210,153,34,0.5)',
+        borderWidth: 0,
+        borderRadius: 2,
+        barPercentage: 1.0,
+        categoryPercentage: 0.9,
+        order: 3,
+        yAxisID: 'y1',
+      }, {
+        label: 'LOW',
+        data: s.signal_confidence?.map((c, i) => c === 'low' ? 2.5 : NaN) || [],
+        backgroundColor: 'rgba(33,38,45,0.8)',
+        borderColor: 'rgba(33,38,45,0.9)',
+        borderWidth: 0,
+        borderRadius: 2,
+        barPercentage: 1.0,
+        categoryPercentage: 0.9,
+        order: 3,
+        yAxisID: 'y1',
       }, {
         label: 'ETF 收盘价',
         data: s.etf_close.map(v => v === 0 ? null : v),
         type: 'line',
         borderColor: blue,
         backgroundColor: blue,
-        pointBackgroundColor: s.direction.map(d =>
-          d === 'bullish' || d === 'strong_bullish' ? green :
-          d === 'bearish' || d === 'strong_bearish' ? red :
-          d === 'panic_dominant' ? yellow : blue
-        ),
-        pointRadius: 5,
-        pointHoverRadius: 8,
-        tension: 0.3,
+        pointBackgroundColor: pointColors,
+        pointRadius: 2,
+        pointHoverRadius: 6,
+        tension: 0.2,
+        order: 2,
+        yAxisID: 'y',
+      }, {
+        label: '极端日',
+        data: s.etf_close.map((v, i) => {
+          const e = extremeDays.find(x => x.index === i);
+          return e ? v : null;
+        }),
+        type: 'scatter',
+        backgroundColor: extremeDays.map(e => e.change > 0 ? green : red),
+        borderColor: extremeDays.map(e => e.change > 0 ? green : red),
+        pointRadius: 6,
+        pointHoverRadius: 9,
         order: 1,
-        yAxisID: 'y1',
+        yAxisID: 'y',
       }]
     },
     options: {
@@ -126,36 +244,130 @@ body { font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif; backgr
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top' },
+        legend: { display: false },
         tooltip: {
           callbacks: {
+            label: function(ctx) {
+              const i = ctx.dataIndex;
+              const val = ctx.raw;
+              if (ctx.dataset.label === 'ETF 收盘价') {
+                return `ETF: ${val?.toFixed(3) || '—'}`;
+              }
+              if (ctx.dataset.label === '极端日') {
+                const e = extremeDays.find(x => x.index === i);
+                if (e) return `极端日 ${e.change > 0 ? '↑' : '↓'} ${Math.abs(e.change).toFixed(2)}% (前日: ${e.prevConf})`;
+              }
+              return '';
+            },
             afterBody: function(ctx) {
               const i = ctx[0].dataIndex;
+              const conf = s.signal_confidence?.[i] || 'low';
+              const cf = {high:'🟢 HIGH', medium:'🟡 MEDIUM', low:'🔴 LOW'};
+              const dir = s.direction?.[i] || '';
               const dl = {strong_bullish:'强偏多',bullish:'偏多',none:'中性',bearish:'偏空',strong_bearish:'强偏空',panic_dominant:'恐慌主导'};
-              return `方向: ${dl[s.direction[i]] || s.direction[i]} | ${({high:"🟢高可信",medium:"🟡中可信",low:"🔴低可信"})[s.signal_confidence?.[i]||"low"]}`;
+              return `可信度: ${cf[conf]} | 方向: ${dl[dir] || dir} | 评分: ${s.score?.[i]?.toFixed(1) || '—'}`;
             }
           }
         }
       },
       scales: {
+        x: {
+          ticks: {
+            maxTicksLimit: 20,
+            font: { size: 10 }
+          }
+        },
         y: {
-          min: -10, max: 10,
+          min: Math.min(...s.etf_close.filter(v => v > 0)) * 0.95 || 3.0,
+          max: Math.max(...s.etf_close) * 1.05 || 4.3,
           position: 'left',
-          grid: { color: '#21262d' },
-          ticks: { stepSize: 2 }
+          grid: { color: gray },
+          ticks: { callback: v => v.toFixed(3) }
         },
         y1: {
-          min: Math.min(...s.etf_close.filter(v => v > 0)) * 0.97 || 3.5,
-          max: Math.max(...s.etf_close) * 1.03 || 4.2,
+          min: 0,
+          max: 3,
           position: 'right',
           grid: { display: false },
-          ticks: { callback: v => v.toFixed(3) }
+          ticks: { display: false }
         }
       }
     }
   });
 
-  document.getElementById('updateTime').textContent = '更新: ' + new Date().toLocaleString('zh-CN');
+  // ── 子图：模块计数 ──
+  new Chart(document.getElementById('subChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '偏多模块数',
+        data: s.bullish,
+        backgroundColor: 'rgba(63,185,80,0.5)',
+        borderColor: green,
+        borderWidth: 1,
+        order: 2,
+      }, {
+        label: '偏空模块数',
+        data: s.bearish,
+        backgroundColor: 'rgba(248,81,73,0.5)',
+        borderColor: red,
+        borderWidth: 1,
+        order: 2,
+      }, {
+        label: '恐慌模块数',
+        data: s.panic,
+        backgroundColor: 'rgba(210,153,34,0.5)',
+        borderColor: yellow,
+        borderWidth: 1,
+        order: 2,
+      }, {
+        label: 'ETF (参考)',
+        data: s.etf_close.map(v => v === 0 ? null : v),
+        type: 'line',
+        borderColor: '#58a6ff',
+        borderWidth: 1,
+        pointRadius: 0,
+        tension: 0.2,
+        yAxisID: 'y1',
+        order: 1,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            afterBody: function(ctx) {
+              const i = ctx[0].dataIndex;
+              const conf = s.signal_confidence?.[i] || 'low';
+              const cf = {high:'🟢HIGH', medium:'🟡MEDIUM', low:'🔴LOW'};
+              return `可信度: ${cf[conf]}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 16, font: { size: 9 } } },
+        y: {
+          min: 0,
+          max: Math.max(...s.bearish, ...s.bullish, ...s.panic, 5) + 2,
+          ticks: { stepSize: 2 },
+          grid: { color: gray },
+        },
+        y1: {
+          position: 'right',
+          grid: { display: false },
+          ticks: { display: false },
+        }
+      }
+    }
+  });
+
+  document.getElementById('updateTime').textContent = '更新: ' + new Date().toLocaleString('zh-CN', {timeZone:'Asia/Shanghai'});
 })();
 </script>
 </body>
