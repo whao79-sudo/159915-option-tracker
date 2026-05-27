@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>N+M + EMA5信号 — ETF走势图</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://unpkg.com/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f1923;color:#d0d8e0;font-family:'Segoe UI',sans-serif;padding:20px}
@@ -18,6 +18,14 @@ h1{text-align:center;margin-bottom:6px;font-size:20px;color:#e0e8f0}
 .info b{color:#c0d0e0}
 @media(max-width:700px){#chart{height:420px}}
 </style>
+
+  <script>
+  window.addEventListener('load', function() {
+    if(typeof echarts === 'undefined') {
+      document.body.innerHTML = '<div style="text-align:center;padding:50px;color:#ff6b6b">📡 图表库加载失败，请刷新页面重试</div>';
+    }
+  });
+  </script>
 </head>
 <body>
 <h1>📊 N+M信号 · ETF走势 + 信号点位</h1>
