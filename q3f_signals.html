@@ -101,7 +101,7 @@ fetch('./signals_data.json').then(r=>r.json()).then(d=>{
         if(whaleDates.includes(date)){
             const wi = whaleDates.indexOf(date);
             const price = whalePrice[wi]&&whalePrice[wi].length?Math.min(...whalePrice[wi].filter(p=>p>0)):0;
-            whalePts.push({value:[i, etf[i]], price});
+            whalePts.push([i, etf[i]]);
         }
     });
 
