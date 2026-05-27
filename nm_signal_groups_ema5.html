@@ -32,7 +32,7 @@ const raw = {"bull_call_over5": {"label": ">MA300 + CALL + \u4ef7>EMA5", "color"
 
 const keys = ['bull_call_over5','bull_call_under5','bear_call_over5','bear_call_under5','bear_put_over5','bear_put_under5'];
 const labels = ['牛市追涨','牛市回调','熊市反弹CALL','熊市追跌CALL','熊市冲高做空','熊市顺势做空'];
-const colors = ['#ef5350','#e57373','#ff8a65','#ffccbc','#18ffff','#b9f6ca'];
+const colors = ['#e03131','#f06595','#ff922b','#fab005','#20c997','#339af0'];
 
 // 图例
 document.getElementById('legend').innerHTML = keys.map((k,i)=>
@@ -108,7 +108,7 @@ chart.setOption({
         type: 'scatter'
         symbol: 'circle',
         data: raw[k].data.map(d=>[td(d.d).getTime(), d.etf, d.win15, d.cnt]),
-        symbolSize: 10,
+        symbolSize: 12,
         itemStyle: {color: colors[i], borderColor: '#ffffff', borderWidth: 1}
       };
     })
