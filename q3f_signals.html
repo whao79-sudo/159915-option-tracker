@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Q3+F+密度 · 159915 期权信号看板</title>
+<script src="https://unpkg.com/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,'Microsoft YaHei',sans-serif;padding:16px}
+.container{max-width:1200px;margin:0 auto}
+h1{text-align:center;font-size:18px;margin:0 0 2px;color:#eee}
+.sub{text-align:center;font-size:11px;color:#666;margin-bottom:10px}
+.chart-box{background:#16213e;border-radius:10px;padding:12px;margin-bottom:10px}
+#main-chart{width:100%;height:400px}
+#density-chart{width:100%;height:140px}
+.info-box{background:#0f3460;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:11px;line-height:1.7;color:#aaa}
+.info-box strong{color:#e94560}
+.green{color:#4ade80}
+.yellow{color:#facc15}
+.red{color:#ef4444}
+.blue{color:#60a5fa}
+.purple{color:#a78bfa}
+.orange{color:#fb923c}
+.signal-card{background:#16213e;border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid}
+.card-title{font-size:13px;font-weight:700;margin-bottom:2px;display:flex;align-items:center;gap:6px}
+.card-desc{font-size:11px;color:#888;margin-bottom:6px}
+.card-stats{display:flex;gap:10px;flex-wrap:wrap}
+.stat{font-size:11px}
+.stat .n{font-size:15px;font-weight:700}
+.stat .l{font-size:9px;color:#666}
+.sig-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;background:rgba(100,116,139,0.2);color:#94a3b8}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.legend-item{font-size:10px;color:#999;padding:2px 6px;border-radius:3px;border:1px solid #333}
+.legend-item .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:3px}
+.signal-card.q3{border-left-color:#818cf8}
+.signal-card.f{border-left-color:#fb923c}
+.signal-card.overlap{border-left-color:#c084fc}
+</style>
+</head><body>
+<div class="container">
+<h1>⚡ 159915 期权双核 · Q3 + F 信号</h1>
+<div class="sub">Q3(波动放大器)+F(结构流动)+N+M密度 · 886交易日 (2022/09~2026/05)</div>
+
+<div class="info-box">
+📌 <strong class="purple">Q3</strong>：GEX&lt;P25+Delta&lt;P25，方向由趋势定（牛市看多96% / 熊市看空74%）<br>
+📌 <strong class="orange">F</strong>：C/P比5日涨P85+OI增P70，恐慌修复拐点（验证集+5.89%/80%）<br>
+📌 <strong class="green">N+M密度</strong>：IV折价(N<P50)信号在30日窗口的占比 → 反映期权市场活跃度<br>
+📌 <strong class="yellow">Q3+F重叠</strong>：双重确认，4次全部发生在2022年10月熊市底部，100%胜率<br>
+📌 <strong class="blue">PUT密度</strong>：熊市IV折价信号占比 → 骤降时恐慌消退，预示反弹<br>
+📌 <strong class="purple">🐋暗仓CALL</strong>：相邻行权价OI同步增>P75，底部横盘时虚值CALL建仓线索（验证集360次）
+</div>
+
+<div class="legend">
+<span class="legend-item"><span class="dot" style="background:#4ade80"></span> ETF日线</span>
+<span class="legend-item"><span class="dot" style="background:rgba(148,163,184,0.4)"></span> MA300</span>
+<span class="legend-item"><span class="dot" style="background:#818cf8"></span> Q3 牛市看多</span>
+<span class="legend-item"><span class="dot" style="background:#6d28d9"></span> Q3 熊市看空</span>
+<span class="legend-item"><span class="dot" style="background:#fb923c"></span> F 结构流动</span>
+<span class="legend-item"><span class="dot" style="background:#c084fc"></span> Q3+F 重叠</span>
+<span class="legend-item"><span class="dot" style="background:#4ade80"></span> N+M CALL密度</span>
+<span class="legend-item"><span class="dot" style="background:#f87171"></span> N+M PUT密度</span>
+<span class="legend-item"><span class="dot" style="background:rgba(147,51,234,0.5)"></span> 🐋暗仓CALL</span>
+</div>
+
+<div class="chart-box"><div id="main-chart"></div></div>
+<div class="chart-box"><div id="density-chart"></div></div>
+
+<div id="stats"></div>
+
+<div class="info-box">
+<strong>🪜 退台式衰减说明</strong><br>
+牛市里（绿线=CALL密度），每一次大跌后CALL密度恢复程度<strong>逐次降低</strong> → 当反弹后密度无法回到前高时，趋势可能见顶。<br>
+熊市里（红线=PUT密度），密度骤降（100%→30%）是恐慌消退，后续大概率反弹。<br>
+<strong>近期</strong>：2026/04~05 CALL密度从20%→83%，恢复中
+</div>
+
+</div>
+
+<script>
+fetch('./signals_data.json').then(r=>r.json()).then(d=>{
+    if(!d||!d.dates||!d.dates.length){
+        document.body.innerHTML='<p style="color:red;padding:40px">数据为空</p>';return;
+    }
+
+    const dates = d.dates, etf = d.etf, maV = d.ma300;
+    const whaleDates = d.whale_dates||[], whaleEtf = d.whale_etf||[];
+    const whaleK = d.whale_otm_k||[], whalePrice = d.whale_otm_price||[];
+    const whaleDetails = d.whale_details||[];
+    const nm_call = d.nm_call_density_loose; // N+M CALL密度
+    const nm_put = d.nm_put_density_loose;   // N+M PUT密度
+    const q3Bulls=[], q3Bears=[], fPts=[], overlapPts=[];
+    const whalePts=[];
+
+    dates.forEach((date,i)=>{
+        if(d.q3_dates.includes(date)){
+            const di = d.q3_dates.indexOf(date);
+            if(d.q3_dirs[di]==='bull') q3Bulls.push([i, etf[i]]);
+            else q3Bears.push([i, etf[i]]);
+        }
+        if(d.f_dates.includes(date)) fPts.push([i, etf[i]]);
+        if(d.overlap_dates.includes(date)) overlapPts.push([i, etf[i]]);
+        if(whaleDates.includes(date)){
+            const wi = whaleDates.indexOf(date);
+            const price = whalePrice[wi]&&whalePrice[wi].length?Math.min(...whalePrice[wi].filter(p=>p>0)):0;
+            whalePts.push({value:[i, etf[i]], price});
+        }
+    });
+
+    // 卡片
+    document.getElementById('stats').innerHTML = `
+    <div class="signal-card q3">
+        <div class="card-title"><span style="color:#818cf8">Q3 · 波动放大器</span><span class="sig-badge">${d.q3_dates.length}次</span></div>
+        <div class="card-desc">GEX&lt;P25+Delta&lt;P25，方向由MA300定</div>
+        <div class="card-stats">
+            <div class="stat"><div class="n green">${d.q3_bull_cnt}</div><div class="l">牛市看多(96%)</div></div>
+            <div class="stat"><div class="n red">${d.q3_bear_cnt}</div><div class="l">熊市看空(74%)</div></div>
+            <div class="stat"><div class="n green">+4.65%</div><div class="l">牛市10日均涨</div></div>
+            <div class="stat"><div class="n red">-1.88%</div><div class="l">熊市10日均涨</div></div>
+        </div>
+    </div>
+    <div class="signal-card f">
+        <div class="card-title"><span style="color:#fb923c">F · 结构流动</span><span class="sig-badge">${d.f_cnt}次</span></div>
+        <div class="card-desc">C/P比5日涨&gt;P85+OI增&gt;P70，恐慌修复拐点</div>
+        <div class="card-stats">
+            <div class="stat"><div class="n yellow">+5.89%</div><div class="l">验证集10日均涨</div></div>
+            <div class="stat"><div class="n green">80%</div><div class="l">+5%命中</div></div>
+            <div class="stat"><div class="n" style="color:#94a3b8">0%</div><div class="l">下跌率</div></div>
+            <div class="stat"><div class="n" style="color:#94a3b8">~10次/年</div><div class="l">频率</div></div>
+        </div>
+    </div>
+    <div class="signal-card overlap" style="border-left-color:#c084fc">
+        <div class="card-title"><span style="color:#c084fc">Q3+F 重叠 · 双重确认</span><span class="sig-badge">${d.overlap_cnt}次</span></div>
+        <div class="card-desc">2022年10月熊市底部，全部落在市场最恐慌时</div>
+        <div class="card-stats">
+            <div class="stat"><div class="n" style="color:#c084fc">100%</div><div class="l">10日胜率</div></div>
+            <div class="stat"><div class="n" style="color:#c084fc">+4.32%</div><div class="l">10日均涨</div></div>
+        </div>
+        <div style="margin-top:5px;font-size:10px;color:#666">
+            ${d.overlap_info.map(o=>`<span style="margin-right:6px">${o.date}</span>`).join('')}
+        </div>
+    </div>`;
+
+    // ===== 主图 =====
+    const chart = echarts.init(document.getElementById('main-chart'));
+    chart.setOption({
+        tooltip: {
+            trigger:'axis',axisPointer:{type:'cross'},
+            backgroundColor:'rgba(22,33,62,0.95)',borderColor:'#333',
+            textStyle:{color:'#eee',fontSize:10},
+            formatter:params=>{
+                const idx=params[0].dataIndex;
+                const date=dates[idx];
+                let html=`<b>${date}</b><br>ETF: ${etf[idx].toFixed(3)} | MA300: ${maV[idx]?maV[idx].toFixed(3):'-'}`;
+                const nc = nm_call[idx]!==null?nm_call[idx].toFixed(0):'-';
+                const np_ = nm_put[idx]!==null?nm_put[idx].toFixed(0):'-';
+                html+=`<br>📊 N+M密度: CALL=${nc}% PUT=${np_}%`;
+                const sigs=[];
+                const wIdx = whaleDates.indexOf(date);
+                if(wIdx>=0){
+                    const kStr = whaleK[wIdx]&&whaleK[wIdx].length?whaleK[wIdx].map(k=>k.toFixed(2)).join(','):'-';
+                    const pStr = whalePrice[wIdx]&&whalePrice[wIdx].length?whalePrice[wIdx].map(p=>p.toFixed(4)).join(','):'-';
+                    sigs.push(`<span style="color:#9333ea">🐋 暗仓CALL K=${kStr} 价=${pStr}</span>`);
+                }
+                if(d.q3_dates.includes(date)){
+                    const di=d.q3_dates.indexOf(date);
+                    sigs.push(`<span style="color:${d.q3_dirs[di]==='bull'?'#818cf8':'#6d28d9'}">◈ Q3 ${d.q3_dirs[di]==='bull'?'看多':'看空'}</span>`);
+                }
+                if(d.f_dates.includes(date)) sigs.push('<span style="color:#fb923c">◆ F 结构流动</span>');
+                if(d.overlap_dates.includes(date)) sigs.push('<span style="color:#c084fc">★ 双重确认!</span>');
+                if(sigs.length) html+='<br>'+sigs.join('<br>');
+                return html;
+            }
+        },
+        dataZoom:[{type:'inside',start:0,end:100},{type:'slider',bottom:0,height:18,borderColor:'#333',
+             fillerColor:'rgba(56,189,248,0.1)',textStyle:{color:'#888',fontSize:9}}],
+        legend:{data:['ETF','MA300','Q3看多','Q3看空','F结构流动','Q3+F重叠','🐋暗仓CALL'],
+            bottom:22,textStyle:{color:'#999',fontSize:10},icon:'roundRect',itemWidth:12,itemHeight:6},
+        grid:{left:45,right:20,top:8,bottom:44},
+        xAxis:{type:'category',data:dates,axisLabel:{color:'#666',fontSize:9,interval:Math.floor(dates.length/25)},
+               axisLine:{lineStyle:{color:'#333'}},splitLine:{show:false}},
+        yAxis:{type:'value',
+               axisLabel:{color:'#4ade80',fontSize:9,formatter:v=>v.toFixed(2)},
+               splitLine:{lineStyle:{color:'#222',type:'dashed'}}},
+        series:[
+            {name:'ETF',type:'line',data:etf,smooth:true,lineStyle:{width:2,color:'#4ade80'},symbol:'none',z:8},
+            {name:'MA300',type:'line',data:maV,smooth:true,lineStyle:{width:1,color:'rgba(148,163,184,0.3)',type:'dashed'},symbol:'none',z:5},
+            {name:'Q3看多',type:'scatter',data:q3Bulls,symbol:'triangle',symbolSize:10,
+             itemStyle:{color:'rgba(129,140,248,0.85)',borderColor:'#a5b4fc',borderWidth:1},z:20},
+            {name:'Q3看空',type:'scatter',data:q3Bears,symbol:'pin',symbolSize:10,
+             itemStyle:{color:'rgba(109,40,217,0.75)'},z:20},
+            {name:'F结构流动',type:'scatter',data:fPts,symbol:'circle',symbolSize:8,
+             itemStyle:{color:'rgba(251,146,60,0.7)',borderColor:'#fb923c',borderWidth:1},z:22},
+            {name:'Q3+F重叠',type:'scatter',data:overlapPts,symbol:'diamond',symbolSize:14,
+             itemStyle:{color:'rgba(192,132,252,0.9)',borderColor:'#c084fc',borderWidth:2},z:25},
+            {name:'🐋 暗仓CALL',type:'scatter',data:whalePts,symbol:'circle',symbolSize:6,
+             itemStyle:{color:'rgba(147,51,234,0.35)',borderColor:'rgba(147,51,234,0.5)',borderWidth:1},z:18},
+        ]
+    });
+    window.addEventListener('resize', ()=>chart.resize());
+
+    // ===== 密度图（N+M信号密度） =====
+    const dc = echarts.init(document.getElementById('density-chart'));
+    const nmCallData = nm_call.map(v=>v!==null?v:null);
+    const nmPutData = nm_put.map(v=>v!==null?v:null);
+    const nm75 = nm_call.map(v=>v!==null?75:null);
+    const nm30 = nm_call.map(v=>v!==null?30:null);
+    dc.setOption({
+        tooltip:{
+            trigger:'axis',
+            backgroundColor:'rgba(22,33,62,0.95)',borderColor:'#333',
+            textStyle:{color:'#eee',fontSize:10},
+            formatter:params=>{
+                const idx=params[0].dataIndex;
+                const nc = nm_call[idx]!==null?nm_call[idx].toFixed(0):'-';
+                const np_ = nm_put[idx]!==null?nm_put[idx].toFixed(0):'-';
+                return `<b>${dates[idx]}</b><br><span style="color:#4ade80">▬</span> N+M CALL密度: ${nc}%
+                <br><span style="color:#f87171">▬</span> N+M PUT密度: ${np_}%
+                <br><span style="color:#888">▬</span> 75%: 密集 | 30%: 稀疏`;
+            }
+        },
+        dataZoom:[{type:'inside',start:0,end:100}],
+        grid:{left:45,right:20,top:6,bottom:10},
+        xAxis:{type:'category',data:dates,show:false},
+        yAxis:{type:'value',min:0,max:100,
+               axisLabel:{color:'#888',fontSize:9},
+               splitLine:{lineStyle:{color:'#222',type:'dashed'}}},
+        series:[
+            {name:'N+M CALL密度',type:'line',data:nmCallData,
+             lineStyle:{width:1.5,color:'rgba(74,222,128,0.8)'},symbol:'none',
+             areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,
+                 colorStops:[{offset:0,color:'rgba(74,222,128,0.2)'},{offset:1,color:'rgba(74,222,128,0)'}]}}},
+            {name:'N+M PUT密度',type:'line',data:nmPutData,
+             lineStyle:{width:1.5,color:'rgba(248,113,113,0.6)'},symbol:'none',
+             areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,
+                 colorStops:[{offset:0,color:'rgba(248,113,113,0.15)'},{offset:1,color:'rgba(248,113,113,0)'}]}}},
+            {name:'75%线',type:'line',data:nm75,
+             lineStyle:{width:1,color:'rgba(74,222,128,0.4)',type:'dashed'},symbol:'none'},
+            {name:'30%线',type:'line',data:nm30,
+             lineStyle:{width:1,color:'rgba(239,68,68,0.4)',type:'dashed'},symbol:'none'},
+        ]
+    });
+    window.addEventListener('resize', ()=>dc.resize());
+
+}).catch(e=>{
+    document.body.innerHTML='<p style="color:red;padding:40px">加载失败: '+e.message+'</p>';
+    console.error(e);
+});
+</script>
+</body></html>
