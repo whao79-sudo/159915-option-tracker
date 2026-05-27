@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>N+M+300 信号 · 159915期权爆发点追踪</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:-apple-system,'Microsoft YaHei',sans-serif;padding:16px}
+h1{text-align:center;font-size:16px;margin:0 0 2px 0;color:#eee}
+.sub{text-align:center;font-size:11px;color:#666;margin-bottom:10px}
+.container{max-width:1400px;margin:0 auto}
+.chart-box{background:#16213e;border-radius:10px;padding:12px;margin-bottom:10px}
+.chart{width:100%;height:320px}
+.chart-sm{width:100%;height:260px}
+.signal-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.signal-card{background:#16213e;border-radius:10px;padding:12px;position:relative;overflow:hidden}
+.signal-card.bull{border-left:3px solid #4ade80}
+.signal-card.bear{border-left:3px solid #ef4444}
+.signal-card.bear-buy{border-left:3px solid #facc15}
+.signal-card.top{border-left:3px solid #a78bfa}
+.card-title{font-size:13px;font-weight:700;margin-bottom:2px}
+.card-desc{font-size:11px;color:#888;margin-bottom:6px}
+.card-stats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.small-stat{background:rgba(255,255,255,0.05);border-radius:4px;padding:4px 6px;text-align:center;min-width:45px}
+.small-stat .n{font-size:13px;font-weight:700}
+.small-stat .l{font-size:9px;color:#666}
+.small-stat .n.green{color:#4ade80}
+.small-stat .n.red{color:#ef4444}
+.small-stat .n.yellow{color:#facc15}
+.small-stat .n.purple{color:#a78bfa}
+.signal-mark{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;margin:1px}
+.signal-mark.bull-sig{background:rgba(74,222,128,0.2);color:#4ade80}
+.signal-mark.bear-sig{background:rgba(239,68,68,0.2);color:#ef4444}
+.signal-mark.bear-buy-sig{background:rgba(250,204,21,0.2);color:#facc15}
+.signal-mark.top-sig{background:rgba(167,139,250,0.2);color:#a78bfa}
+.info-box{background:#0f3460;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;line-height:1.6;color:#aaa}
+.info-box strong{color:#e94560}
+.info-box .green{color:#4ade80}
+.info-box .yellow{color:#facc15}
+.legend{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.legend-item{font-size:10px;color:#999;padding:2px 6px;border-radius:3px;border:1px solid #333}
+.legend-item .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:3px}
+</style>
+</head><body>
+<div class="container">
+<h1>N+M+300 · 期权爆发点信号</h1>
+<div class="sub">条件: IV/HV横截面P15以下 + OI横截面P85以上 + 300日均线过滤 · 886个交易日 (2022/09~2026/05)</div>
+
+<div class="info-box">
+📌 <strong>N模块</strong> = IV/HV比横截面百分位（越低越便宜）<br>
+📌 <strong>E模块</strong> = OI横截面百分位（越高越有资金涌入）<br>
+📌 <strong>300均线过滤</strong>: &gt;MA300=牛市做CALL，&lt;MA300=熊市做PUT<br>
+📌 判断不是"预测方向"而是<strong>条件筛选器</strong>——行情爆发时保证期权仓位在车上
+</div>
+
+<div class="legend">
+<span class="legend-item"><span class="dot" style="background:#4ade80"></span> 牛市CALL</span>
+<span class="legend-item"><span class="dot" style="background:#ef4444"></span> 熊市PUT</span>
+<span class="legend-item"><span class="dot" style="background:#facc15"></span> 熊市抄底CALL</span>
+<span class="legend-item"><span class="dot" style="background:#a78bfa"></span> 牛市猜顶PUT</span>
+</div>
+
+<!-- 信号卡片 -->
+<div class="signal-grid" id="stats-grid"></div>
+
+<!-- 主图：全量信号 + ETF -->
+<div class="chart-box"><div id="c-main" class="chart"></div></div>
+
+<!-- 信号触发图：牛市CALL vs 熊市抄底CALL -->
+<div class="chart-box"><div id="c-bull" class="chart-sm"></div></div>
+
+<!-- 信号触发图：熊市PUT vs 牛市猜顶PUT -->
+<div class="chart-box"><div id="c-bear" class="chart-sm"></div></div>
+
+<!-- 统计表格 -->
+<div class="chart-box" style="padding:10px">
+<div style="font-size:13px;font-weight:700;margin-bottom:6px">📊 各信号统计 (15日窗口爆发力)</div>
+<table id="stats-table" style="width:100%;border-collapse:collapse;font-size:11px"></table>
+</div>
+
+</div>
+
+<script>
+fetch('./nm300_data.json').then(r=>r.json()).then(d=>{
+    if(!d||!d.daily||!d.daily.length){
+        document.body.innerHTML='<p style="color:red;padding:40px">数据为空</p>';return;
+    }
+
+    const dd = d.daily;
+    const dates = dd.map(v=>v.d);
+    const etf = dd.map(v=>v.etf);
+    const ma = dd.map(v=>v.ma);
+
+    // 四个信号数组（标记点）
+    const bullPts = [], bearPts = [], bearBuyPts = [], topPts = [];
+    dd.forEach((v,i)=>{
+        if(v.bull_signal) bullPts.push([i, v.etf]);
+        if(v.bear_signal) bearPts.push([i, v.etf]);
+        if(v.bear_buy_signal) bearBuyPts.push([i, v.etf]);
+        if(v.top_signal) topPts.push([i, v.etf]);
+    });
+
+    // 统计卡片
+    const sigs = {
+        'bull_signal': {label:'牛市CALL做多',desc:'>MA300 + CALL IV便宜+OI大增',cls:'bull',sig:'bull-sig',color:'#4ade80'},
+        'bear_signal': {label:'熊市PUT做空',desc:'<MA300 + PUT IV便宜+OI大增',cls:'bear',sig:'bear-sig',color:'#ef4444'},
+        'bear_buy_signal': {label:'熊市抄底CALL',desc:'<MA300 + CALL IV便宜+OI大增',cls:'bear-buy',sig:'bear-buy-sig',color:'#facc15'},
+        'top_signal': {label:'牛市猜顶PUT',desc:'>MA300 + PUT IV便宜+OI大增',cls:'top',sig:'top-sig',color:'#a78bfa'},
+    };
+
+    let gridHTML = '';
+    for(const [key,info] of Object.entries(sigs)){
+        const sigDays = d[key] || {};
+        const n = sigDays.n || 0;
+        const stats = sigDays.stats || {};
+        const s15 = stats['15'] || {};
+        gridHTML += `<div class="signal-card ${info.cls}">
+            <div class="card-title" style="color:${info.color}">${info.label} <span class="signal-mark ${info.sig}">${n}次</span></div>
+            <div class="card-desc">${info.desc}</div>
+            <div class="card-stats">
+                <div class="small-stat"><div class="n ${info.cls}">${(s15.mean||'-').toFixed(2)}%</div><div class="l">均收益15日</div></div>
+                <div class="small-stat"><div class="n ${info.cls}">${(s15.median||'-').toFixed(2)}%</div><div class="l">中位15日</div></div>
+                <div class="small-stat"><div class="n ${info.cls}">${(s15.pct5||'0').toFixed(0)}%</div><div class="l">5%+触发</div></div>
+                <div class="small-stat"><div class="n ${info.cls}">${(s15.pct10||'0').toFixed(0)}%</div><div class="l">10%+触发</div></div>
+            </div>
+        </div>`;
+    }
+    document.getElementById('stats-grid').innerHTML = gridHTML;
+
+    // 统计表格
+    const periods = ['5','10','15','20'];
+    const tableKeys = ['bull_signal','bear_signal','bear_buy_signal','top_signal'];
+    const tableLabels = ['牛市CALL','熊市PUT','熊市抄底CALL','牛市猜顶PUT'];
+    let tblHTML = `<tr style="background:#0f3460"><th style="padding:4px 6px;text-align:left;border-bottom:1px solid #333">信号</th>`;
+    for(const p of periods) tblHTML += `<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #333" colspan="3">${p}日</th>`;
+    tblHTML += `</tr>`;
+    for(let ti=0; ti<tableKeys.length; ti++){
+        const sigDays = d[tableKeys[ti]] || {};
+        const stats = sigDays.stats || {};
+        tblHTML += `<tr><td style="padding:3px 6px;border-bottom:1px solid #222;font-weight:700">${tableLabels[ti]}</td>`;
+        for(const p of periods){
+            const s = stats[p] || {};
+            tblHTML += `<td style="padding:3px 4px;text-align:center;font-size:10px;border-bottom:1px solid #222">${(s.mean||'-')}%</td>`;
+            tblHTML += `<td style="padding:3px 4px;text-align:center;font-size:10px;border-bottom:1px solid #222">${(s.median||'-')}%</td>`;
+            tblHTML += `<td style="padding:3px 4px;text-align:center;font-size:10px;border-bottom:1px solid #222;color:${(s.pct5||0)>35?'#4ade80':'#888'}">${(s.pct5||'0')}%</td>`;
+        }
+        tblHTML += `</tr>`;
+    }
+    document.getElementById('stats-table').innerHTML = tblHTML;
+
+    // 主图
+    const mainChart = echarts.init(document.getElementById('c-main'));
+    mainChart.setOption({
+        tooltip: {
+            trigger: 'axis', axisPointer: {type:'cross'},
+            backgroundColor: 'rgba(22,33,62,0.95)', borderColor: '#333',
+            textStyle: {color:'#eee',fontSize:10},
+            formatter: function(params) {
+                const idx = params[0].dataIndex;
+                const day = dd[idx];
+                let html = `<b>${day.d}</b><br>ETF: ${day.etf.toFixed(3)}`;
+                html += ` | MA300: ${day.ma.toFixed(3)}`;
+                const sigs = [];
+                if(day.bull_signal) sigs.push('<span style="color:#4ade80">⚡牛市CALL</span>');
+                if(day.bear_signal) sigs.push('<span style="color:#ef4444">⚡熊市PUT</span>');
+                if(day.bear_buy_signal) sigs.push('<span style="color:#facc15">⚡熊市抄底CALL</span>');
+                if(day.top_signal) sigs.push('<span style="color:#a78bfa">⚡牛市猜顶PUT</span>');
+                if(sigs.length) html += '<br>'+sigs.join(' ');
+                return html;
+            }
+        },
+        dataZoom: [
+            {type:'inside',start:0,end:100},
+            {type:'slider',bottom:0,height:18,borderColor:'#333',
+             fillerColor:'rgba(56,189,248,0.1)',textStyle:{color:'#888',fontSize:9}}
+        ],
+        legend: {
+            data: ['ETF','MA300','牛市CALL','熊市PUT','熊市抄底CALL','牛市猜顶PUT'],
+            bottom: 24, textStyle: {color:'#999',fontSize:10},
+            icon: 'roundRect', itemWidth: 12, itemHeight: 6
+        },
+        grid: {left:50,right:20,top:8,bottom:46},
+        xAxis: {
+            type:'category',data:dates,
+            axisLabel:{color:'#666',fontSize:9,interval:Math.floor(dates.length/30)},
+            axisLine:{lineStyle:{color:'#333'}},splitLine:{show:false}
+        },
+        yAxis: [
+            {type:'value',name:'ETF',nameTextStyle:{color:'#4ade80',fontSize:9},
+             axisLabel:{color:'#4ade80',fontSize:9,formatter:v=>v.toFixed(2)},
+             splitLine:{lineStyle:{color:'#222',type:'dashed'}}},
+        ],
+        series: [
+            {name:'ETF',type:'line',data:etf,smooth:true,
+             lineStyle:{width:2,color:'#4ade80'},symbol:'none',z:8},
+            {name:'MA300',type:'line',data:ma,smooth:true,
+             lineStyle:{width:1,color:'rgba(148,163,184,0.4)',type:'dashed'},symbol:'none',z:5},
+            {name:'牛市CALL',type:'scatter',data:bullPts,
+             symbol:'triangle',symbolSize:10,
+             itemStyle:{color:'rgba(74,222,128,0.8)'},z:20},
+            {name:'熊市PUT',type:'scatter',data:bearPts,
+             symbol:'pin',symbolSize:10,
+             itemStyle:{color:'rgba(239,68,68,0.8)'},z:20},
+            {name:'熊市抄底CALL',type:'scatter',data:bearBuyPts,
+             symbol:'diamond',symbolSize:8,
+             itemStyle:{color:'rgba(250,204,21,0.7)'},z:15},
+            {name:'牛市猜顶PUT',type:'scatter',data:topPts,
+             symbol:'rect',symbolSize:8,
+             itemStyle:{color:'rgba(167,139,250,0.7)'},z:15},
+        ]
+    });
+    window.addEventListener('resize', ()=>mainChart.resize());
+
+    // 牛市信号图
+    const bullChart = echarts.init(document.getElementById('c-bull'));
+    const bearBuyChart = echarts.init(document.getElementById('c-bear'));
+
+    // 牛市图: ETF + MA300 + 牛市CALL信号 + 熊市抄底CALL信号
+    bullChart.setOption({
+        tooltip:{trigger:'axis',backgroundColor:'rgba(22,33,62,0.95)',borderColor:'#333',textStyle:{color:'#eee',fontSize:10}},
+        legend:{data:['ETF','MA300','牛市CALL','熊市抄底CALL'],bottom:4,textStyle:{color:'#999',fontSize:9},icon:'roundRect'},
+        grid:{left:45,right:15,top:6,bottom:26},
+        xAxis:{type:'category',data:dates,axisLabel:{color:'#666',fontSize:8,interval:Math.floor(dates.length/25)}},
+        yAxis:{type:'value',axisLabel:{color:'#666',fontSize:8,formatter:v=>v.toFixed(2)},
+               splitLine:{lineStyle:{color:'#222',type:'dashed'}}},
+        series:[
+            {name:'ETF',type:'line',data:etf,smooth:true,lineStyle:{width:1.5,color:'#4ade80'},symbol:'none'},
+            {name:'MA300',type:'line',data:ma,smooth:true,lineStyle:{width:1,color:'rgba(148,163,184,0.3)',type:'dashed'},symbol:'none'},
+            {name:'牛市CALL',type:'scatter',data:bullPts,symbol:'triangle',symbolSize:8,
+             itemStyle:{color:'rgba(74,222,128,0.8)'},z:10},
+            {name:'熊市抄底CALL',type:'scatter',data:bearBuyPts,symbol:'diamond',symbolSize:7,
+             itemStyle:{color:'rgba(250,204,21,0.7)'},z:10},
+        ]
+    });
+    window.addEventListener('resize', ()=>bullChart.resize());
+
+    // 熊市信号图
+    bearBuyChart.setOption({
+        tooltip:{trigger:'axis',backgroundColor:'rgba(22,33,62,0.95)',borderColor:'#333',textStyle:{color:'#eee',fontSize:10}},
+        legend:{data:['ETF','MA300','熊市PUT','牛市猜顶PUT'],bottom:4,textStyle:{color:'#999',fontSize:9},icon:'roundRect'},
+        grid:{left:45,right:15,top:6,bottom:26},
+        xAxis:{type:'category',data:dates,axisLabel:{color:'#666',fontSize:8,interval:Math.floor(dates.length/25)}},
+        yAxis:{type:'value',axisLabel:{color:'#666',fontSize:8,formatter:v=>v.toFixed(2)},
+               splitLine:{lineStyle:{color:'#222',type:'dashed'}}},
+        series:[
+            {name:'ETF',type:'line',data:etf,smooth:true,lineStyle:{width:1.5,color:'#4ade80'},symbol:'none'},
+            {name:'MA300',type:'line',data:ma,smooth:true,lineStyle:{width:1,color:'rgba(148,163,184,0.3)',type:'dashed'},symbol:'none'},
+            {name:'熊市PUT',type:'scatter',data:bearPts,symbol:'pin',symbolSize:8,
+             itemStyle:{color:'rgba(239,68,68,0.8)'},z:10},
+            {name:'牛市猜顶PUT',type:'scatter',data:topPts,symbol:'rect',symbolSize:7,
+             itemStyle:{color:'rgba(167,139,250,0.7)'},z:10},
+        ]
+    });
+    window.addEventListener('resize', ()=>bearBuyChart.resize());
+
+}).catch(e=>{
+    document.body.innerHTML='<p style="color:red;padding:40px">加载失败: '+e.message+'</p>';
+    console.error(e);
+});
+</script>
+</body></html>
